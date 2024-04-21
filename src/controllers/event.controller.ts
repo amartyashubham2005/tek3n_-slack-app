@@ -1,5 +1,4 @@
 import express from 'express';
-import OpenAI from 'openai';
 import fs from 'fs';
 
 import Controller from '../interfaces/controller.interface';
@@ -8,36 +7,16 @@ import CommonService from '../services/common.service';
 import logger, { prettyJSON } from '../utils/logger';
 import slackAuthMiddleware from '../middleware/slackAuth.middleware';
 import EnvService from '../services/env.service';
-import { TextContentBlock } from 'openai/resources/beta/threads/messages/messages';
 
 class EventController implements Controller {
   public router = express.Router();
   public commonService = new CommonService();
-  public openai = new OpenAI();
-  public assistant: OpenAI.Beta.Assistants.Assistant | undefined;
 
   // userSlackContextToThreadIdMap is a map from user's slack context to thread id
   public userSlackContextToThreadIdMap: { [key: string]: string };
 
   constructor() {
     this.initializeRoutes();
-    // this.openai.models.list().then((response) => {
-    //   console.log(response);
-    // });
-    this.openai.beta.assistants
-      .create({
-        name: 'ChatGPT Helper',
-        instructions: 'You are a clone of ChatGPT',
-        tools: [{ type: 'retrieval' }],
-        model: 'gpt-4-turbo-preview',
-      })
-      .then((response) => {
-        console.log(response);
-        this.assistant = response;
-      })
-      .catch((error) => {
-        console.error(error);
-      });
 
     // Load the userSlackContextToThreadIdMap from the json file
     this.userSlackContextToThreadIdMap = JSON.parse(
@@ -95,7 +74,7 @@ class EventController implements Controller {
           })
         ];
       if (!threadId) {
-        const thread = await this.openai.beta.threads.create();
+        const thread = await this.commonService.openai.beta.threads.create();
         threadId = thread.id;
         this.userSlackContextToThreadIdMap[
           this.commonService.createSlackContext({
@@ -110,10 +89,13 @@ class EventController implements Controller {
         );
       } else {
         // check if the thread is still active
-        const thread = await this.openai.beta.threads.retrieve(threadId);
+        const thread = await this.commonService.openai.beta.threads.retrieve(
+          threadId
+        );
         // create a new thread if the thread is not returned
         if (!thread) {
-          const newThread = await this.openai.beta.threads.create();
+          const newThread =
+            await this.commonService.openai.beta.threads.create();
           threadId = newThread.id;
           this.userSlackContextToThreadIdMap[
             this.commonService.createSlackContext({
@@ -135,50 +117,20 @@ class EventController implements Controller {
             slackChannelId: payload.event.channel,
           })
         ];
-      await this.openai.beta.threads.messages.create(threadId, {
-        role: 'user',
-        // Strip the mention from the message if it is a channel message
-        content: payload.event.text.replace(/<@.*>/, '').trim(),
-      });
-      let run = await this.openai.beta.threads.runs.create(threadId, {
-        assistant_id: this.assistant?.id ?? '',
-        instructions: `Please address the user as <@${payload.event.user}>.`,
-      });
-      while (['queued', 'in_progress', 'cancelling'].includes(run.status)) {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for 1 second
-        run = await this.openai.beta.threads.runs.retrieve(
-          run.thread_id,
-          run.id
-        );
-        if (run.status === 'completed') {
-          const messages = await this.openai.beta.threads.messages.list(
-            run.thread_id
-          );
-          for (const message of messages.data) {
-            console.log(
-              `${message.role} > ${
-                (message.content[0] as TextContentBlock).text.value
-              }`
-            );
-            // If it is from DM, send the message to the user as a new message.
-            // If it is from the channel, send the message to the channel as a thread.
-            await this.commonService.postMessageInDm({
-              botAccessToken: EnvService.env().BOT_ACCESS_TOKEN,
-              sink:
-                channel_type === 'im'
-                  ? payload.event.user
-                  : payload.event.channel,
-              text: `${(message.content[0] as TextContentBlock).text.value}`,
-              ...(channel_type === 'im' ? {} : { ts: payload.event.ts }),
-            });
+      const sink =
+        channel_type === 'im' ? payload.event.user : payload.event.channel;
 
-            // Need to take only the last message
-            break;
-          }
-        } else {
-          console.log(run);
-        }
-      }
+      const reply = await this.commonService.getAnswerFromOpenAI({
+        threadId,
+        userMessage: payload.event.text.replace(/<@.*>/, '').trim(),
+      });
+      logger.info(`Reply from OpenAI: ${prettyJSON(reply)}`);
+      await this.commonService.postMessageInDm({
+        botAccessToken: EnvService.env().BOT_ACCESS_TOKEN,
+        sink,
+        text: reply ?? 'I am sorry, I could not understand that.',
+        ...(channel_type === 'im' ? {} : { ts: payload.event.ts }),
+      });
     }
   };
 }

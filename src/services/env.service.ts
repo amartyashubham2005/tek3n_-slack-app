@@ -10,6 +10,8 @@ export type EnvVariables = {
   CLIENT_SECRET: string;
   SIGNING_SECRET: string;
   BOT_ACCESS_TOKEN: string;
+  SEARCH_ENGINE_ID: string;
+  GOOGLE_API_KEY: string;
 };
 
 /*
@@ -25,6 +27,8 @@ class EnvService implements AbstractService {
     CLIENT_SECRET: str(),
     SIGNING_SECRET: str(),
     BOT_ACCESS_TOKEN: str(),
+    SEARCH_ENGINE_ID: str(),
+    GOOGLE_API_KEY: str(),
   };
 
   static envs: Readonly<EnvVariables>;
