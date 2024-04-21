@@ -3,8 +3,7 @@ import ThreadMessageI from '../interfaces/threadMessages.interface';
 import logger, { prettyJSON } from '../utils/logger';
 
 class CommonService {
-
-  // 
+  //
 
   // Slack APIs
 
@@ -277,6 +276,55 @@ class CommonService {
     return undefined;
   }
 
+  public async getFirstMessageFromThread({
+    botAccessToken,
+    channelId,
+    threadTs,
+  }: {
+    botAccessToken: string;
+    channelId: string;
+    threadTs: string;
+  }): Promise<
+    | {
+        ok: boolean;
+        message: ThreadMessageI;
+      }
+    | undefined
+  > {
+    try {
+      const response = await axios.get(
+        `https://slack.com/api/conversations.replies?channel=${channelId}&ts=${threadTs}&limit=1`,
+        {
+          headers: {
+            Authorization: `Bearer ${botAccessToken}`,
+          },
+        }
+      );
+      if (
+        !response ||
+        response.status != 200 ||
+        response.data.ok === false ||
+        response.data.messages.length === 0
+      ) {
+        throw Error(
+          `Failed to get chat, response status: ${
+            response.status
+          } response data: ${prettyJSON(response.data)}`
+        );
+      }
+      return {
+        ok: true,
+        message: response.data.messages[0] as ThreadMessageI,
+      };
+    } catch (e: any) {
+      logger.error(`Error getting message from ${channelId}`);
+      logger.error(e.message);
+      logger.error(prettyJSON(e));
+    }
+    logger.error(`Failed to get messages from DM 2`);
+    return undefined;
+  }
+
   public async getPermalink({
     botAccessToken,
     channelId,
@@ -411,6 +459,17 @@ class CommonService {
     }
     logger.error(`Failed to get messages from DM 2`);
     return undefined;
+  }
+
+  // Misc
+  public createSlackContext({
+    slackUserId,
+    slackChannelId,
+  }: {
+    slackUserId: string;
+    slackChannelId: string;
+  }): string {
+    return `${slackUserId}-${slackChannelId}`;
   }
 }
 
