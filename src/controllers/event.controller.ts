@@ -42,7 +42,7 @@ class EventController implements Controller {
     const { type, channel_type, thread_ts } = payload.event;
     if (type === 'message') {
       logger.info(`Received event payload: ${prettyJSON(payload)}`);
-      if (channel_type === 'group') {
+      if (channel_type === 'group' || channel_type == 'mpim') {
         if (thread_ts) {
           // This is a reply to a thread message. Check if the first message contained the bot mention.
           const threadFirstMessage =
