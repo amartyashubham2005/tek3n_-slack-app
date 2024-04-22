@@ -51,12 +51,12 @@ class EventController implements Controller {
               channelId: payload.event.channel,
               threadTs: thread_ts,
             });
-          if (!threadFirstMessage?.message.text.includes('<@U06SC5BPG68>')) {
+          if (!threadFirstMessage?.message.text.includes(`<@${EnvService.env().BOT_USER_ID}>`)) {
             return;
           }
         } else {
           // This is a new message in the channel. Check if the message contains the bot mention.
-          if (!payload.event.text.includes('<@U06SC5BPG68>')) {
+          if (!payload.event.text.includes(`<@${EnvService.env().BOT_USER_ID}>`)) {
             return;
           }
         }
